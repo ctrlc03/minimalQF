@@ -3,7 +3,7 @@ pragma solidity 0.8.10;
 
 import { TallyFactory } from "maci-contracts/contracts/TallyFactory.sol";
 
-import { MinimalQFTally } from "./MinimalQFTally.sol";
+import { MinimalQFTally } from "../MinimalQFTally.sol";
 
 /// @title MinimalQFTallyFactory
 /// @notice This contract is a MinimalQFTally Factory

@@ -6,8 +6,8 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 
 import { Tally } from "maci-contracts/contracts/Tally.sol";
 
-import { IFundingRound } from "./IFundingRound.sol";
-import { IRecipientRegistry } from "./IRecipientRegistry.sol";
+import { IFundingRound } from "./interfaces/IFundingRound.sol";
+import { IRecipientRegistry } from "./interfaces/IRecipientRegistry.sol";
 
 /// @title MinimalQFTally
 /// @notice This contract is a minimal implementation of a Quadratic Funding

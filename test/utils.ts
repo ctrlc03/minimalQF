@@ -6,7 +6,7 @@ export const duration = 20
 
 export const STATE_TREE_DEPTH = 10
 export const STATE_TREE_ARITY = 5
-export const MESSAGE_TREE_DEPTH = 2
+export const MESSAGE_TREE_DEPTH = 8
 export const MESSAGE_TREE_SUBDEPTH = 1
 export const messageBatchSize = STATE_TREE_ARITY ** MESSAGE_TREE_SUBDEPTH
 

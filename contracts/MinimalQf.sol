@@ -13,9 +13,9 @@ import { SignUpGatekeeper } from "maci-contracts/contracts/gatekeepers/SignUpGat
 import { InitialVoiceCreditProxy } from "maci-contracts/contracts/initialVoiceCreditProxy/InitialVoiceCreditProxy.sol";
 import { TopupCredit } from "maci-contracts/contracts/TopupCredit.sol";
 
-import { IRecipientRegistry } from "./IRecipientRegistry.sol";
-import { IFundingRound } from "./IFundingRound.sol";
-import { IFundingRoundTally } from "./IFundingRoundTally.sol";
+import { IRecipientRegistry } from "./interfaces/IRecipientRegistry.sol";
+import { IFundingRound } from "./interfaces/IFundingRound.sol";
+import { IFundingRoundTally } from "./interfaces/IFundingRoundTally.sol";
 
 /// @title MinimalQF
 /// @notice This contract is a minimal implementation of a Quadratic Funding

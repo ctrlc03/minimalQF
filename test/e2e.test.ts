@@ -1,15 +1,15 @@
 import { expect } from "chai"
 import { ethers } from "hardhat"
-import { FundingRoundFactory, MinimalFundingRound__factory, MinimalQF } from "../typechain-types"
+import { MinimalQF } from "../typechain-types"
 import {
     ERC20,
     IVerifyingKeyStruct,
     MessageProcessorFactory,
-    MockVerifier,
+    PollFactory,
+    Poll__factory,
     TallyFactory,
     Verifier,
     VkRegistry,
-    deployMockVerifier,
     deployPoseidonContracts,
     deployTopupCredit,
     deployVerifier,
@@ -45,9 +45,9 @@ describe("e2e", function test() {
     let minimalQF: MinimalQF
     let minimalQFAddress: string
     let token: ERC20
-    let user1: Signer
-    let user1Address: string
+
     let owner: Signer
+    let user: Signer
     let ownerAddress: string
 
     // create a new user keypair
@@ -60,12 +60,12 @@ describe("e2e", function test() {
     let vkRegistryContract: VkRegistry
 
     before(async () => {
-        ;[owner] = await ethers.getSigners()
-        ownerAddress = await owner.getAddress()
-        // user1Address = await user1.getAddress();
+        ;[owner, user] = await ethers.getSigners()
 
-        // verifierContract = await deployVerifier(undefined, true);
-        // vkRegistryContract = await deployVkRegistry(undefined, true);
+        ownerAddress = await owner.getAddress()
+
+        verifierContract = await deployVerifier(undefined, true);
+        vkRegistryContract = await deployVkRegistry(undefined, true)
 
         // deploy factories
         const recipientRegistryFactory = await ethers.getContractFactory("RecipientRegistry")
@@ -73,8 +73,6 @@ describe("e2e", function test() {
 
         const tokenFactory = await ethers.getContractFactory("MockERC20")
         token = (await tokenFactory.deploy("Test Token", "TST")) as unknown as ERC20
-
-        // await token.transfer(await user1.getAddress(), 100_000_000_000_000n);
 
         const signupGatekeeperFactory = await ethers.getContractFactory("FreeForAllGatekeeper")
         const signupGatekeeper = await signupGatekeeperFactory.deploy()
@@ -100,8 +98,8 @@ describe("e2e", function test() {
 
         const contractsToLink = [
             "MinimalQF",
-            "FundingRoundFactory",
-            "MinimalQFMessageProcessorFactory",
+            "PollFactory",
+            "MessageProcessorFactory",
             "MinimalQFTallyFactory",
         ]
 
@@ -124,7 +122,7 @@ describe("e2e", function test() {
             await Promise.all(linkedContractFactories)
 
         const pollFactoryContract =
-            await deployContractWithLinkedLibraries<FundingRoundFactory>(pollFactoryContractFactory)
+            await deployContractWithLinkedLibraries<PollFactory>(pollFactoryContractFactory)
 
         const messageProcessorFactoryContract =
             await deployContractWithLinkedLibraries<MessageProcessorFactory>(messageProcessorFactory)
@@ -142,7 +140,7 @@ describe("e2e", function test() {
             pollAddr,
             mpAddr,
             tallyAddr,
-            ZeroAddress,
+            await topupcredit.getAddress(),
             await signupGatekeeper.getAddress(),
             await initialVoiceCreditsProxy.getAddress(),
             await topupcredit.getAddress(),
@@ -155,23 +153,33 @@ describe("e2e", function test() {
 
         iface = minimalQF.interface
 
-        // // set the verification keys on the vk smart contract
-        // await vkRegistryContract.setVerifyingKeys(
-        //     STATE_TREE_DEPTH,
-        //     treeDepths.intStateTreeDepth,
-        //     treeDepths.messageTreeDepth,
-        //     treeDepths.voteOptionTreeDepth,
-        //     messageBatchSize,
-        //     testProcessVk.asContractParam() as IVerifyingKeyStruct,
-        //     testTallyVk.asContractParam() as IVerifyingKeyStruct,
-        //     { gasLimit: 1000000 },
-        // );
+        // set the verification keys on the vk smart contract
+        await vkRegistryContract.setVerifyingKeys(
+            STATE_TREE_DEPTH,
+            treeDepths.intStateTreeDepth,
+            treeDepths.messageTreeDepth,
+            treeDepths.voteOptionTreeDepth,
+            messageBatchSize,
+            testProcessVk.asContractParam() as IVerifyingKeyStruct,
+            testTallyVk.asContractParam() as IVerifyingKeyStruct,
+            { gasLimit: 1000000 },
+        );
     })
 
     describe("deployment", function () {
         it("should have deployed a new MinimalQf instance", async () => {
             expect(await minimalQF.getAddress()).to.not.be.undefined
             expect(await minimalQF.stateTreeDepth()).to.eq(10n)
+        })
+    })
+
+    describe("fundingSources", () => {
+        it("should allow the admin to add a funding source", async () => {
+            await minimalQF.addFundingSource(ownerAddress)
+        })
+
+        it("should throw if the caller is not the admin", async () => {
+            await expect(minimalQF.connect(user).addFundingSource(ownerAddress)).to.be.revertedWith("Ownable: caller is not the owner")
         })
     })
 
@@ -215,8 +223,8 @@ describe("e2e", function test() {
                 100n,
                 treeDepths,
                 coordinatorKeypair.pubKey.asContractParam(),
-                ZeroAddress,
-                ZeroAddress,
+                await verifierContract.getAddress(),
+                await vkRegistryContract.getAddress(),
                 false,
             )
         })
@@ -235,7 +243,8 @@ describe("e2e", function test() {
     describe("publish message", () => {
         it("should allow to publish a message", async () => {
             const roundAddr = await minimalQF.polls(0)
-            const round = MinimalFundingRound__factory.connect(roundAddr, owner)
+
+            const round = Poll__factory.connect(roundAddr, owner)
 
             const keypair = new Keypair()
 
@@ -249,7 +258,7 @@ describe("e2e", function test() {
 
         it("should allow to publish a batch of messages", async () => {
             const roundAddr = await minimalQF.polls(0)
-            const round = MinimalFundingRound__factory.connect(roundAddr, owner)
+            const round = Poll__factory.connect(roundAddr, owner)
 
             const keypair = new Keypair()
 
@@ -258,7 +267,15 @@ describe("e2e", function test() {
             const signature = command.sign(keypair.privKey)
             const sharedKey = Keypair.genEcdhSharedKey(keypair.privKey, coordinatorKeypair.pubKey)
             const message = command.encrypt(signature, sharedKey)
-            await round.submitBatch(new Array(25).fill(message), new Array(25).fill(keypair.pubKey.asContractParam()))
+
+            const messages = new Array(84).fill(message.asContractParam())
+            const keys = new Array(84).fill(keypair.pubKey.asContractParam())
+
+            await round.publishMessageBatch(messages, keys, { gasLimit: 30000000 })
         })
+    })
+
+    describe("complete round", () => {
+
     })
 })
