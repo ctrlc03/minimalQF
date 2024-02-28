@@ -166,6 +166,7 @@ contract MinimalQF is Ownable, MACI {
         // get balance of current contract
         matchingPoolSize = nativeToken.balanceOf(address(this));
 
+        // cache the array length
         uint256 len = fundingSources.length;
         for (uint256 index = 0; index < len; ) {
             address fundingSource = fundingSources[index];
@@ -176,6 +177,9 @@ contract MinimalQF is Ownable, MACI {
 
             unchecked {
                 // cannot overflow uint256 with a ERC20 total supply
+                // one could set an allowance which is uint256.max
+                // to overflow this, but here it would be <
+                // balance so it would += balance not allowance
                 matchingPoolSize += allowance < balance ? allowance : balance;
                 index++;
             }
@@ -194,11 +198,13 @@ contract MinimalQF is Ownable, MACI {
         // cache the native token
         IERC20 _nativeToken = nativeToken;
 
+        // get the balance of this contract first
         uint256 matchingPoolSize = _nativeToken.balanceOf(address(this));
 
         // cache tally address
         address currentRoundTally = address(tally);
 
+        // transfer to the tally contract
         if (matchingPoolSize > 0) {
             _nativeToken.safeTransfer(currentRoundTally, matchingPoolSize);
         }
@@ -207,8 +213,10 @@ contract MinimalQF is Ownable, MACI {
         uint256 len = fundingSources.length;
         for (uint256 index = 0; index < len; ) {
             address fundingSource = fundingSources[index];
+
             uint256 allowance = _nativeToken.allowance(fundingSource, address(this));
             uint256 balance = _nativeToken.balanceOf(fundingSource);
+
             uint256 contribution = allowance < balance ? allowance : balance;
 
             // if > 0 then transfer

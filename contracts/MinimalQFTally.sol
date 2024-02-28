@@ -9,6 +9,8 @@ import { Tally } from "maci-contracts/contracts/Tally.sol";
 import { IFundingRound } from "./interfaces/IFundingRound.sol";
 import { IRecipientRegistry } from "./interfaces/IRecipientRegistry.sol";
 
+import "hardhat/console.sol";
+
 /// @title MinimalQFTally
 /// @notice This contract is a minimal implementation of a Quadratic Funding
 /// Tally contract
@@ -36,7 +38,7 @@ contract MinimalQFTally is Tally {
     // the total amount of spent voice credits
     uint256 public totalSpent;
     // the matching pool size
-    uint256 public matchingPollSize;
+    uint256 public matchingPoolSize;
 
     // the minimal QF contract
     address public minimalQF;
@@ -53,6 +55,7 @@ contract MinimalQFTally is Tally {
     error BallotsNotTallied();
     error InvalidBudget();
     error NoProjectHasMoreThanOneVote();
+    error InvalidSpentVoiceCreditsProof();
     error InvalidPerVOSpentVoiceCreditsProof();
     error NoVotes();
     error AlreadyFinalized();
@@ -85,7 +88,7 @@ contract MinimalQFTally is Tally {
     }
 
     /// @dev Cancel current round.
-    function cancelCurrentRound() external onlyOwner {
+    function cancelRound() external onlyOwner {
         if (isFinalized) revert AlreadyFinalized();
 
         isCancelled = true;
@@ -164,6 +167,13 @@ contract MinimalQFTally is Tally {
         // check that this is called by MinimalQF
         if (msg.sender != minimalQF) revert OnlyMinimalQF();
 
+        // cannot be cancelled
+        if (isCancelled) revert RoundCancelled();
+
+        // cannot finalize twice
+        if (isFinalized) revert AlreadyFinalized();
+        isFinalized = true;
+
         // check that all ballots have been tallied
         if (!isTallied()) revert BallotsNotTallied();
 
@@ -172,7 +182,7 @@ contract MinimalQFTally is Tally {
 
         // verify proof
         if (!verifySpentVoiceCredits(_totalSpent, _totalSpentSalt, _newResultCommitment, _perVOSpentVoiceCreditsHash)) {
-            revert InvalidPerVOSpentVoiceCreditsProof();
+            revert InvalidSpentVoiceCreditsProof();
         }
 
         // store the total spent
@@ -180,9 +190,9 @@ contract MinimalQFTally is Tally {
 
         // get balance and calculate matching pool size
         uint256 budget = nativeToken.balanceOf(address(this));
-        matchingPollSize = budget - totalSpent * VOICE_CREDIT_FACTOR;
+        matchingPoolSize = budget - totalSpent * VOICE_CREDIT_FACTOR;
 
-        alpha = calcAlpha(budget, _totalSpent, _perVOSpentVoiceCreditsHash);
+        alpha = calcAlpha(budget, _totalSpent * _totalSpent, _totalSpent);
     }
 
     /// @notice Calculate the amount to distribute to a certain project

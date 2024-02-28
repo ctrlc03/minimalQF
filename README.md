@@ -6,4 +6,4 @@ A minimal QF implementation written using MACI v1.2.0.
 
 ## Credits
 
-This takes inspiration from clr.fund code (https://github.com/clrfund/monorepo) 
+This takes inspiration from clr.fund code (https://github.com/clrfund/monorepo)

@@ -1,49 +1,29 @@
 import { expect } from "chai"
 import { ethers } from "hardhat"
-import { MinimalQF } from "../typechain-types"
+import { MinimalQF, RecipientRegistry } from "../typechain-types"
 import {
     ERC20,
-    IVerifyingKeyStruct,
-    MessageProcessorFactory,
-    PollFactory,
+    MessageProcessor,
+    MessageProcessor__factory,
+    MockVerifier,
     Poll__factory,
-    TallyFactory,
     Verifier,
     VkRegistry,
-    deployPoseidonContracts,
-    deployTopupCredit,
-    deployVerifier,
-    deployVkRegistry,
-    linkPoseidonLibraries,
 } from "maci-contracts"
 import { AbiCoder, Signer, ZeroAddress, type BigNumberish } from "ethers"
-import { Keypair, PCommand } from "maci-domainobjs"
+import { Keypair, Message, PCommand, PubKey } from "maci-domainobjs"
 import { MinimalQFInterface } from "../typechain-types/contracts/MinimalQf.sol/MinimalQF"
-import { STATE_TREE_DEPTH, messageBatchSize, testProcessVk, testTallyVk, treeDepths } from "./utils"
-
-/**
- * Deploy a contract with linked libraries
- * @param contractFactory - the contract factory to use
- * @param name - the name of the contract
- * @param quiet - whether to suppress console output
- * @param args - the constructor arguments of the contract
- * @returns the deployed contract instance
- */
-export const deployContractWithLinkedLibraries = async <T extends any>(
-    contractFactory: any,
-    ...args: unknown[]
-): Promise<T> => {
-    const contract = await contractFactory.deploy(...args)
-    await contract.deploymentTransaction()!.wait()
-
-    return contract as T
-}
+import { STATE_TREE_DEPTH, deployTestContracts, maxValues, messageBatchSize, timeTravel, treeDepths } from "./utils"
+import { EthereumProvider } from "hardhat/types"
+import { ITallyCircuitInputs, MaciState, Poll } from "maci-core"
+import { genTreeCommitment } from "maci-crypto"
 
 describe("e2e", function test() {
     this.timeout(90000000)
 
     let minimalQF: MinimalQF
     let minimalQFAddress: string
+    let recipientRegistry: RecipientRegistry
     let token: ERC20
 
     let owner: Signer
@@ -56,148 +36,65 @@ describe("e2e", function test() {
 
     let iface: MinimalQFInterface
 
-    let verifierContract: Verifier
+    let verifierContract: MockVerifier
     let vkRegistryContract: VkRegistry
+
+    const signupAmount = 100_000_000_000_000n
 
     before(async () => {
         ;[owner, user] = await ethers.getSigners()
 
         ownerAddress = await owner.getAddress()
 
-        verifierContract = await deployVerifier(undefined, true);
-        vkRegistryContract = await deployVkRegistry(undefined, true)
+        const contracts = await deployTestContracts()
 
-        // deploy factories
-        const recipientRegistryFactory = await ethers.getContractFactory("RecipientRegistry")
-        const recipientRegistry = await recipientRegistryFactory.deploy()
-
-        const tokenFactory = await ethers.getContractFactory("MockERC20")
-        token = (await tokenFactory.deploy("Test Token", "TST")) as unknown as ERC20
-
-        const signupGatekeeperFactory = await ethers.getContractFactory("FreeForAllGatekeeper")
-        const signupGatekeeper = await signupGatekeeperFactory.deploy()
-
-        const initialVoiceCreditProxyFactory = await ethers.getContractFactory("ERC20InitialVoiceCreditProxy")
-        const initialVoiceCreditsProxy = await initialVoiceCreditProxyFactory.deploy(10e8)
-        const topupcredit = await deployTopupCredit(undefined, true)
-
-        const { PoseidonT3Contract, PoseidonT4Contract, PoseidonT5Contract, PoseidonT6Contract } =
-            await deployPoseidonContracts(undefined, undefined, true)
-
-        const poseidonAddrs = await Promise.all([
-            PoseidonT3Contract.getAddress(),
-            PoseidonT4Contract.getAddress(),
-            PoseidonT5Contract.getAddress(),
-            PoseidonT6Contract.getAddress(),
-        ]).then(([poseidonT3, poseidonT4, poseidonT5, poseidonT6]) => ({
-            poseidonT3,
-            poseidonT4,
-            poseidonT5,
-            poseidonT6,
-        }))
-
-        const contractsToLink = [
-            "MinimalQF",
-            "PollFactory",
-            "MessageProcessorFactory",
-            "MinimalQFTallyFactory",
-        ]
-
-        // Link Poseidon contracts to MACI
-        const linkedContractFactories = await Promise.all(
-            contractsToLink.map(async (contractName: string) =>
-                linkPoseidonLibraries(
-                    contractName,
-                    poseidonAddrs.poseidonT3,
-                    poseidonAddrs.poseidonT4,
-                    poseidonAddrs.poseidonT5,
-                    poseidonAddrs.poseidonT6,
-                    undefined,
-                    true,
-                ),
-            ),
-        )
-
-        const [minimalQFFactory, pollFactoryContractFactory, messageProcessorFactory, tallyFactory] =
-            await Promise.all(linkedContractFactories)
-
-        const pollFactoryContract =
-            await deployContractWithLinkedLibraries<PollFactory>(pollFactoryContractFactory)
-
-        const messageProcessorFactoryContract =
-            await deployContractWithLinkedLibraries<MessageProcessorFactory>(messageProcessorFactory)
-
-        const tallyFactoryContract = await deployContractWithLinkedLibraries<TallyFactory>(tallyFactory)
-
-        const [pollAddr, mpAddr, tallyAddr] = await Promise.all([
-            pollFactoryContract.getAddress(),
-            messageProcessorFactoryContract.getAddress(),
-            tallyFactoryContract.getAddress(),
-        ])
-
-        minimalQF = await deployContractWithLinkedLibraries<MinimalQF>(
-            minimalQFFactory,
-            pollAddr,
-            mpAddr,
-            tallyAddr,
-            await topupcredit.getAddress(),
-            await signupGatekeeper.getAddress(),
-            await initialVoiceCreditsProxy.getAddress(),
-            await topupcredit.getAddress(),
-            STATE_TREE_DEPTH,
-            await token.getAddress(),
-            await recipientRegistry.getAddress(),
-        )
+        minimalQF = contracts.minimalQF
+        verifierContract = contracts.verifierContract
+        vkRegistryContract = contracts.vkRegistryContract
+        token = contracts.token
+        recipientRegistry = contracts.recipientRegistry
 
         minimalQFAddress = await minimalQF.getAddress()
 
         iface = minimalQF.interface
-
-        // set the verification keys on the vk smart contract
-        await vkRegistryContract.setVerifyingKeys(
-            STATE_TREE_DEPTH,
-            treeDepths.intStateTreeDepth,
-            treeDepths.messageTreeDepth,
-            treeDepths.voteOptionTreeDepth,
-            messageBatchSize,
-            testProcessVk.asContractParam() as IVerifyingKeyStruct,
-            testTallyVk.asContractParam() as IVerifyingKeyStruct,
-            { gasLimit: 1000000 },
-        );
     })
 
     describe("deployment", function () {
         it("should have deployed a new MinimalQf instance", async () => {
             expect(await minimalQF.getAddress()).to.not.be.undefined
-            expect(await minimalQF.stateTreeDepth()).to.eq(10n)
+            expect(await minimalQF.stateTreeDepth()).to.eq(6n)
         })
     })
 
-    describe("fundingSources", () => {
-        it("should allow the admin to add a funding source", async () => {
-            await minimalQF.addFundingSource(ownerAddress)
+    describe("addFundingSource", () => {
+        it("should allow the admin to add a funding source and emit an event", async () => {
+            await expect(minimalQF.addFundingSource(ownerAddress))
+                .to.emit(minimalQF, "FundingSourceAdded")
+                .withArgs(ownerAddress)
         })
 
         it("should throw if the caller is not the admin", async () => {
-            await expect(minimalQF.connect(user).addFundingSource(ownerAddress)).to.be.revertedWith("Ownable: caller is not the owner")
+            await expect(minimalQF.connect(user).addFundingSource(ownerAddress)).to.be.revertedWith(
+                "Ownable: caller is not the owner",
+            )
         })
     })
 
     describe("signup", () => {
         it("should allow to signup a user", async () => {
             const userBalanceBefore = await token.balanceOf(ownerAddress)
-            await token.connect(owner).approve(minimalQFAddress, 100_000_000_000_000n)
+            await token.connect(owner).approve(minimalQFAddress, signupAmount)
             const tx = await minimalQF
                 .connect(owner)
                 .signUp(
                     keypair.pubKey.asContractParam(),
                     AbiCoder.defaultAbiCoder().encode(["uint256"], [1n]),
-                    AbiCoder.defaultAbiCoder().encode(["uint256"], [100_000_000_000_000n]),
+                    AbiCoder.defaultAbiCoder().encode(["uint256"], [signupAmount]),
                 )
 
             // balance check
             const userBalanceAfter = await token.balanceOf(ownerAddress)
-            expect(userBalanceBefore - userBalanceAfter).to.eq(100_000_000_000_000n)
+            expect(userBalanceBefore - userBalanceAfter).to.eq(signupAmount)
 
             const receipt = await tx.wait()
 
@@ -213,7 +110,7 @@ describe("e2e", function test() {
             }
 
             expect(event.args._stateIndex).to.eq(1n)
-            expect(event.args._voiceCreditBalance).to.eq(100_000_000_000_000n / BigInt(10e8))
+            expect(event.args._voiceCreditBalance).to.eq(signupAmount / BigInt(10e8))
         })
     })
 
@@ -275,7 +172,239 @@ describe("e2e", function test() {
         })
     })
 
-    describe("complete round", () => {
+    describe("recipientRegistry", () => {
+        it("should allow the owner to add a recipient", async () => {
+            await recipientRegistry.addRecipient(0n, ownerAddress)
+        })
+        it("should allow the owner to add multiple recipients", async () => {
+            await recipientRegistry.addRecipients([ownerAddress, ownerAddress, ownerAddress])
+        })
+        it("should throw if the caller is not the owner", async () => {
+            await expect(recipientRegistry.connect(user).addRecipient(0n, ownerAddress)).to.be.revertedWith(
+                "Ownable: caller is not the owner",
+            )
+        })
+    })
 
+    describe("getMatchingFunds", () => {
+        it("should return the correct amount of matching funds (amount in the contract)", async () => {
+            const funds = await minimalQF.getMatchingFunds()
+            expect(funds).to.eq(signupAmount)
+        })
+
+        it("should return the correct amount of matching funds (amount in the contract + approved tokens by funding source)", async () => {
+            await token.connect(owner).approve(minimalQFAddress, signupAmount)
+            const funds = await minimalQF.getMatchingFunds()
+            expect(funds).to.eq(signupAmount * 2n)
+        })
+    })
+
+    describe("cancelRound", () => {
+        it("should prevent a non owner from cancelling a round", async () => {
+            const tally = await minimalQF.tally()
+            const contract = await ethers.getContractAt("MinimalQFTally", tally)
+            await expect(contract.connect(user).cancelRound()).to.be.revertedWith("Ownable: caller is not the owner")
+        })
+        it("should allow the owner to cancel a round", async () => {
+            const tally = await minimalQF.tally()
+            const contract = await ethers.getContractAt("MinimalQFTally", tally)
+            await contract.cancelRound()
+
+            expect(await contract.isCancelled()).to.eq(true)
+        })
+    })
+
+    describe("finalize", () => {
+        let newMinimalQf: MinimalQF
+        let newToken: ERC20
+        let mpContract: MessageProcessor
+
+        let tallyData: ITallyCircuitInputs
+
+        const maciState = new MaciState(STATE_TREE_DEPTH)
+        let poll: Poll
+
+        before(async () => {
+            const c = await deployTestContracts()
+            newMinimalQf = c.minimalQF
+            newToken = c.token
+
+            const tx = await newMinimalQf.deployPoll(
+                100n,
+                treeDepths,
+                coordinatorKeypair.pubKey.asContractParam(),
+                await verifierContract.getAddress(),
+                await vkRegistryContract.getAddress(),
+                false,
+            )
+
+            const receipt = await tx.wait()
+            const logs = receipt!.logs[receipt!.logs.length - 1]
+            const event = iface.parseLog(logs as unknown as { topics: string[]; data: string }) as unknown as {
+                args: {
+                    _pollId: bigint
+                    pollAddr: {
+                        poll: string
+                        messageProcessor: string
+                        tally: string
+                    }
+                }
+                name: string
+            }
+            expect(event.name).to.eq("DeployPoll")
+
+            const block = await owner.provider!.getBlock(receipt!.blockHash)
+            const deployTime = block!.timestamp
+
+            const pollId = maciState.deployPoll(
+                BigInt(deployTime) + 100n,
+                maxValues,
+                {
+                    ...treeDepths,
+                    intStateTreeDepth: treeDepths.intStateTreeDepth,
+                },
+                messageBatchSize,
+                coordinatorKeypair,
+            )
+
+            poll = maciState.polls.get(pollId)!
+
+            mpContract = MessageProcessor__factory.connect(event.args.pollAddr.messageProcessor, owner)
+
+            // signup
+            await newToken.connect(owner).approve(newMinimalQf.getAddress(), signupAmount)
+            const timestamp = Math.floor(Date.now() / 1000)
+            await newMinimalQf
+                .connect(owner)
+                .signUp(
+                    keypair.pubKey.asContractParam(),
+                    AbiCoder.defaultAbiCoder().encode(["uint256"], [1n]),
+                    AbiCoder.defaultAbiCoder().encode(["uint256"], [signupAmount]),
+                )
+
+            maciState.signUp(keypair.pubKey, signupAmount / BigInt(10e8), BigInt(timestamp))
+
+            // create 1 message
+            const command = new PCommand(1n, keypair.pubKey, 0n, 9n, 1n, 0n, 0n)
+            const signature = command.sign(keypair.privKey)
+            const sharedKey = Keypair.genEcdhSharedKey(keypair.privKey, coordinatorKeypair.pubKey)
+            const message = command.encrypt(signature, sharedKey)
+            const messageContractParam = message.asContractParam()
+
+            // update the poll state
+            poll.updatePoll(BigInt(maciState.stateLeaves.length))
+
+            // merge the trees
+            const pollAddr = await newMinimalQf.polls(0)
+            const pollContract = Poll__factory.connect(pollAddr, owner)
+
+            // publish message on chain and locally
+            const nothing = new Message(1n, [
+                8370432830353022751713833565135785980866757267633941821328460903436894336785n,
+                0n,
+                0n,
+                0n,
+                0n,
+                0n,
+                0n,
+                0n,
+                0n,
+                0n,
+            ])
+
+            const encP = new PubKey([
+                10457101036533406547632367118273992217979173478358440826365724437999023779287n,
+                19824078218392094440610104313265183977899662750282163392862422243483260492317n,
+            ])
+            poll.publishMessage(nothing, encP)
+            poll.publishMessage(message, keypair.pubKey)
+            await pollContract.publishMessage(messageContractParam, keypair.pubKey.asContractParam())
+
+            await timeTravel(owner.provider as unknown as EthereumProvider, 300)
+
+            await pollContract.mergeMaciStateAqSubRoots(0n, 0n)
+            await pollContract.mergeMaciStateAq(0n)
+
+            await pollContract.mergeMessageAqSubRoots(0n)
+            await pollContract.mergeMessageAq()
+
+            const processMessagesInputs = poll.processMessages(pollId)
+
+            await mpContract.processMessages(processMessagesInputs.newSbCommitment, [0, 0, 0, 0, 0, 0, 0, 0])
+        })
+
+        it("should throw when not called by the MinimalQF contract", async () => {
+            const tally = await minimalQF.tally()
+            const contract = await ethers.getContractAt("MinimalQFTally", tally, user)
+            await expect(contract.finalize(5, 5, 5, 5)).to.be.revertedWithCustomError(contract, "OnlyMinimalQF")
+        })
+
+        it("should throw when the round is cancelled", async () => {
+            const tally = await minimalQF.tally()
+            const contract = await ethers.getContractAt("MinimalQFTally", tally, user)
+            await expect(minimalQF.transferMatchingFunds(5, 5, 5, 5)).to.be.revertedWithCustomError(
+                contract,
+                "RoundCancelled",
+            )
+        })
+
+        it("should throw when the ballots have not been tallied yet", async () => {
+            const tally = await newMinimalQf.tally()
+            const contract = await ethers.getContractAt("MinimalQFTally", tally, user)
+            expect(await contract.isTallied()).to.eq(false)
+
+            await expect(newMinimalQf.transferMatchingFunds(5, 5, 5, 5)).to.be.revertedWithCustomError(
+                contract,
+                "BallotsNotTallied",
+            )
+        })
+
+        it("should throw when the spent voice credit proof is wrong", async () => {
+            // tally the ballots
+
+            const tally = await newMinimalQf.tally()
+            const contract = await ethers.getContractAt("MinimalQFTally", tally, owner)
+
+            tallyData = poll.tallyVotes()
+            await contract.tallyVotes(tallyData.newTallyCommitment, [0, 0, 0, 0, 0, 0, 0, 0])
+
+            expect(await contract.isTallied()).to.eq(true)
+
+            await expect(newMinimalQf.transferMatchingFunds(5, 5, 5, 5)).to.be.revertedWithCustomError(
+                contract,
+                "InvalidSpentVoiceCreditsProof",
+            )
+        })
+
+        it("should allow the MinimalQF contract to finalize the round", async () => {
+            // compute newResultsCommitment
+            const newResultsCommitment = genTreeCommitment(
+                poll.tallyResult.map((x) => BigInt(x)),
+                BigInt(tallyData.newResultsRootSalt),
+                treeDepths.voteOptionTreeDepth,
+            )
+
+            const newPerVOSpentVoiceCreditsCommitment = genTreeCommitment(
+                poll.perVOSpentVoiceCredits.map((x) => BigInt(x)),
+                BigInt(tallyData.newPerVOSpentVoiceCreditsRootSalt!),
+                treeDepths.voteOptionTreeDepth,
+            )
+
+            await newMinimalQf.transferMatchingFunds(
+                poll.totalSpentVoiceCredits,
+                tallyData.newSpentVoiceCreditSubtotalSalt,
+                newResultsCommitment,
+                newPerVOSpentVoiceCreditsCommitment,
+            )
+        })
+
+        it("should not allow to finalize twice", async () => {
+            const tally = await newMinimalQf.tally()
+            const contract = await ethers.getContractAt("MinimalQFTally", tally, user)
+            await expect(newMinimalQf.transferMatchingFunds(5, 5, 5, 5)).to.be.revertedWithCustomError(
+                contract,
+                "AlreadyFinalized",
+            )
+        })
     })
 })

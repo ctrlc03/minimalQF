@@ -7,6 +7,8 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 /// @notice This contract is a simple registry of recipients
 /// @dev it allows the owner to overwrite the recipients
 /// use with caution.
+/// @dev Also this does not constrain the number of recipients
+/// which might be > vote options
 contract RecipientRegistry is Ownable {
     // simple storage of recipients (id => address)
     mapping(uint256 => address) public recipients;

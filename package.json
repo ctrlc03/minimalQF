@@ -1,32 +1,34 @@
 {
-  "name": "minimal-qf",
-  "description": "A minimal implementation of Quadratic Funding",
-  "version": "0.0.1",
-  "author": "ctrlc03",
-  "scripts": {
-    "compile": "hardhat compile",
-    "test:solidity": "hardhat test --network hardhat",
-    "test:live": "hardhat test --network localhost",
-    "prettier:write": "prettier --write . --write **/*",
-    "vote": "hardhat run scripts/publishMessages.ts"
-  },
-  "devDependencies": {
-    "@types/chai": "^4.3.11",
-    "@types/circomlibjs": "^0.1.6",
-    "@types/mocha": "^10.0.6",
-    "hardhat-artifactor": "^0.2.0",
-    "prettier": "^3.2.5",
-    "prettier-plugin-solidity": "^1.3.1",
-    "ts-node": "^10.9.2"
-  },
-  "dependencies": {
-    "@nomicfoundation/hardhat-ethers": "3.0.5",
-    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
-    "circomlibjs": "^0.1.7",
-    "dotenv": "^16.4.5",
-    "ethers": "^6.11.1",
-    "hardhat": "2.19.5",
-    "maci-contracts": "0.0.0-ci.5358b23",
-    "maci-domainobjs": "0.0.0-ci.aedd38b"
-  }
+    "name": "minimal-qf",
+    "description": "A minimal implementation of Quadratic Funding",
+    "version": "0.0.1",
+    "author": "ctrlc03",
+    "scripts": {
+        "compile": "hardhat compile",
+        "test:solidity": "hardhat test --network hardhat",
+        "test:live": "hardhat test --network localhost",
+        "prettier:write": "prettier --write . --write **/*",
+        "vote": "hardhat run scripts/publishMessages.ts"
+    },
+    "devDependencies": {
+        "@types/chai": "^4.3.11",
+        "@types/circomlibjs": "^0.1.6",
+        "@types/mocha": "^10.0.6",
+        "hardhat-artifactor": "^0.2.0",
+        "maci-core": "latest",
+        "maci-crypto": "1.2.0",
+        "maci-domainobjs": "1.2.0",
+        "prettier": "^3.2.5",
+        "prettier-plugin-solidity": "^1.3.1",
+        "ts-node": "^10.9.2"
+    },
+    "dependencies": {
+        "@nomicfoundation/hardhat-ethers": "3.0.5",
+        "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+        "circomlibjs": "^0.1.7",
+        "dotenv": "^16.4.5",
+        "ethers": "^6.11.1",
+        "hardhat": "2.19.5",
+        "maci-contracts": "latest"
+    }
 }
