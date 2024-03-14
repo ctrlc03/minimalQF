@@ -6,7 +6,6 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 
 import { Tally } from "maci-contracts/contracts/Tally.sol";
 
-import { IFundingRound } from "./interfaces/IFundingRound.sol";
 import { IRecipientRegistry } from "./interfaces/IRecipientRegistry.sol";
 
 import "hardhat/console.sol";
@@ -49,6 +48,9 @@ contract MinimalQFTally is Tally {
     // whether the contract was init or not
     bool internal isInit;
 
+    // the link to the tally result json file
+    string public tallyResultLink;
+
     // custom errors
     error AlreadyInit();
     error RoundCancelled();
@@ -87,11 +89,17 @@ contract MinimalQFTally is Tally {
         minimalQF = _minimalQF;
     }
 
-    /// @dev Cancel current round.
+    /// @notice Cancel current round.
     function cancelRound() external onlyOwner {
         if (isFinalized) revert AlreadyFinalized();
 
         isCancelled = true;
+    }
+
+    /// @notice Publish the tally result link
+    /// @param _tallyResultLink the link to the tally result json file
+    function publishTallyResultLink(string calldata _tallyResultLink) external onlyOwner {
+        tallyResultLink = _tallyResultLink;
     }
 
     /// @notice Verify the per vote option spent voice credits proof and claim funds
@@ -132,8 +140,8 @@ contract MinimalQFTally is Tally {
             )
         ) revert InvalidPerVOSpentVoiceCreditsProof();
 
-        // get the recipient
-        address recipient = recipientRegistry.recipients(_voteOptionIndex);
+        // get the recipient address
+        address recipient = recipientRegistry.getRecipient(_voteOptionIndex);
         // check that the recipient has not received their funds already
         if (hasClaimedFunds[recipient]) revert AlreadyClaimedFunds();
         // set so they cannot claim anymore

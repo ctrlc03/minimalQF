@@ -16,7 +16,7 @@ import { MaxValues, TreeDepths } from "maci-core"
 import { G1Point, G2Point } from "maci-crypto"
 import { VerifyingKey } from "maci-domainobjs"
 import { ethers } from "hardhat"
-import { ERC20, MinimalQF, RecipientRegistry } from "../typechain-types"
+import { ERC20, MinimalQF, SimpleRecipientRegistry } from "../typechain-types"
 import { EthereumProvider } from "hardhat/types"
 
 export const duration = 20
@@ -63,7 +63,7 @@ export interface ITestContracts {
     vkRegistryContract: VkRegistry
     verifierContract: MockVerifier
     token: ERC20
-    recipientRegistry: RecipientRegistry
+    recipientRegistry: SimpleRecipientRegistry
 }
 
 export const deployTestContracts = async (): Promise<ITestContracts> => {
@@ -71,7 +71,7 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
     const vkRegistryContract = await deployVkRegistry(undefined, true)
 
     // deploy factories
-    const recipientRegistryFactory = await ethers.getContractFactory("RecipientRegistry")
+    const recipientRegistryFactory = await ethers.getContractFactory("SimpleRecipientRegistry")
     const recipientRegistry = await recipientRegistryFactory.deploy()
 
     const tokenFactory = await ethers.getContractFactory("MockERC20")
@@ -163,8 +163,7 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
         treeDepths.voteOptionTreeDepth,
         messageBatchSize,
         testProcessVk.asContractParam() as IVerifyingKeyStruct,
-        testTallyVk.asContractParam() as IVerifyingKeyStruct,
-        { gasLimit: 1000000 },
+        testTallyVk.asContractParam() as IVerifyingKeyStruct
     )
 
     return {

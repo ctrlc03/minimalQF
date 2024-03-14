@@ -15,7 +15,7 @@
         "@types/circomlibjs": "^0.1.6",
         "@types/mocha": "^10.0.6",
         "hardhat-artifactor": "^0.2.0",
-        "maci-core": "latest",
+        "maci-core": "1.2.0",
         "maci-crypto": "1.2.0",
         "maci-domainobjs": "1.2.0",
         "prettier": "^3.2.5",
@@ -29,6 +29,6 @@
         "dotenv": "^16.4.5",
         "ethers": "^6.11.1",
         "hardhat": "2.19.5",
-        "maci-contracts": "latest"
+        "maci-contracts": "1.2.0"
     }
 }

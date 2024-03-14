@@ -14,7 +14,6 @@ import { InitialVoiceCreditProxy } from "maci-contracts/contracts/initialVoiceCr
 import { TopupCredit } from "maci-contracts/contracts/TopupCredit.sol";
 
 import { IRecipientRegistry } from "./interfaces/IRecipientRegistry.sol";
-import { IFundingRound } from "./interfaces/IFundingRound.sol";
 import { IFundingRoundTally } from "./interfaces/IFundingRoundTally.sol";
 
 /// @title MinimalQF
@@ -44,6 +43,7 @@ contract MinimalQF is Ownable, MACI {
 
     // custom errors
     error RoundNotCancelled();
+    error RoundNotFinalized();
 
     /// @notice Create a new instance of MinimalQF
     /// @param _fundingRoundFacotory The address of the funding round factory
@@ -67,18 +67,16 @@ contract MinimalQF is Ownable, MACI {
         uint8 _stateTreeDepth,
         address _token,
         address _recipientRegistry
-    )
-        MACI(
-            _fundingRoundFacotory,
-            _messageProcessorFactory,
-            _tallyFactory,
-            _subsidyFactory,
-            _signUpGatekeeper,
-            _initialVoiceCreditProxy,
-            _topupCredit,
-            _stateTreeDepth
-        )
-    {
+    ) MACI(
+        _fundingRoundFacotory,
+        _messageProcessorFactory,
+        _tallyFactory,
+        _subsidyFactory,
+        _signUpGatekeeper,
+        _initialVoiceCreditProxy,
+        _topupCredit,
+        _stateTreeDepth
+    ) {
         nativeToken = IERC20(_token);
         recipientRegistry = IRecipientRegistry(_recipientRegistry);
     }
@@ -136,6 +134,11 @@ contract MinimalQF is Ownable, MACI {
 
     /// @notice Withdraw funds
     /// @dev only if the round was cancelled
+    /// We cannot allow contributors to withdraw funds if the round was not cancelled
+    /// because we cannot revoke their signup to MACI so votes would be valid
+    /// regardless of them withdrawing funds or not
+    /// @dev If the user lost access to their wallet, we can send to them with 
+    /// rescueFunds
     function withdraw() external {
         // check if the round was cancelled
         if (!tally.isCancelled()) {
@@ -239,5 +242,20 @@ contract MinimalQF is Ownable, MACI {
 
         // emit event so we know the round is finished
         emit RoundFinalized(currentRoundTally);
+    }
+
+    /// @notice Rescue funds from the contract
+    /// @dev Only works on the native token when the round is finalized
+    /// @dev Funds are supposed to be sent to the Tally contract, though 
+    /// they could have been sent back to this contract if a recipient
+    /// address is address(0)
+    function rescueFunds(uint256 _amount, address _to) external onlyOwner {
+        // we first check if the round is finalized
+        if (!tally.isFinalized()) {
+            revert RoundNotFinalized();
+        }
+
+        // then just transfer the tokens to the _to address
+        nativeToken.safeTransfer(_to, _amount);
     }
 }

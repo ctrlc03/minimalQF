@@ -1,29 +1,31 @@
 import { expect } from "chai"
 import { ethers } from "hardhat"
-import { MinimalQF, RecipientRegistry } from "../typechain-types"
+import { AbiCoder, Signer, ZeroAddress, type BigNumberish } from "ethers"
+
+import { Keypair, Message, PCommand, PubKey } from "maci-domainobjs"
+import { ITallyCircuitInputs, MaciState, Poll } from "maci-core"
+import { genTreeCommitment } from "maci-crypto"
 import {
     ERC20,
     MessageProcessor,
     MessageProcessor__factory,
     MockVerifier,
     Poll__factory,
-    Verifier,
     VkRegistry,
 } from "maci-contracts"
-import { AbiCoder, Signer, ZeroAddress, type BigNumberish } from "ethers"
-import { Keypair, Message, PCommand, PubKey } from "maci-domainobjs"
+
+import type { EthereumProvider } from "hardhat/types"
+
+import { MinimalQF, SimpleRecipientRegistry } from "../typechain-types"
 import { MinimalQFInterface } from "../typechain-types/contracts/MinimalQf.sol/MinimalQF"
 import { STATE_TREE_DEPTH, deployTestContracts, maxValues, messageBatchSize, timeTravel, treeDepths } from "./utils"
-import { EthereumProvider } from "hardhat/types"
-import { ITallyCircuitInputs, MaciState, Poll } from "maci-core"
-import { genTreeCommitment } from "maci-crypto"
 
 describe("e2e", function test() {
     this.timeout(90000000)
 
     let minimalQF: MinimalQF
     let minimalQFAddress: string
-    let recipientRegistry: RecipientRegistry
+    let recipientRegistry: SimpleRecipientRegistry
     let token: ERC20
 
     let owner: Signer

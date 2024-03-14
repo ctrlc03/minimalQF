@@ -15,4 +15,5 @@ interface IFundingRoundTally {
         uint256 _perVOSpentVoiceCreditsHash
     ) external;
     function isCancelled() external view returns (bool);
+    function isFinalized() external view returns (bool);
 }
