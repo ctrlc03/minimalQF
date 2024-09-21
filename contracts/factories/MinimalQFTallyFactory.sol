@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.10;
+pragma solidity ^0.8.20;
 
 import { TallyFactory } from "maci-contracts/contracts/TallyFactory.sol";
 
@@ -18,10 +18,11 @@ contract MinimalQFTallyFactory is TallyFactory {
         address _vkRegistry,
         address _poll,
         address _messageProcessor,
-        address _owner
+        address _owner,
+        Mode _mode
     ) public override returns (address tallyAddr) {
         // deploy Tally for this Poll
-        MinimalQFTally tally = new MinimalQFTally(_verifier, _vkRegistry, _poll, _messageProcessor);
+        MinimalQFTally tally = new MinimalQFTally(_verifier, _vkRegistry, _poll, _messageProcessor, _owner, _mode);
 
         tally.transferOwnership(_owner);
 

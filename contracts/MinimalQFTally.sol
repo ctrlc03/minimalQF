@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.10;
+pragma solidity ^0.8.20;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -73,8 +73,10 @@ contract MinimalQFTally is Tally {
         address _verifier,
         address _vkRegistry,
         address _poll,
-        address _mp
-    ) payable Tally(_verifier, _vkRegistry, _poll, _mp) {}
+        address _mp,
+        address _tallyOwner,
+        Mode _mode
+    ) payable Tally(_verifier, _vkRegistry, _poll, _mp, _tallyOwner, _mode) {}
 
     /// @notice Initialize the contract
     /// @param _nativeToken the native token

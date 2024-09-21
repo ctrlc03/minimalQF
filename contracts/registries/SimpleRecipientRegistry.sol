@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.10;
+pragma solidity ^0.8.20;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -9,7 +9,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 /// use with caution.
 /// @dev Also this does not constrain the number of recipients
 /// which might be > vote options
-contract SimpleRecipientRegistry is Ownable {
+contract SimpleRecipientRegistry is Ownable(msg.sender) {
     // simple storage of recipients (id => address)
     mapping(uint256 => address) internal recipients;
 

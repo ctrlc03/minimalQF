@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.10;
+pragma solidity ^0.8.20;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -8,10 +8,9 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { MACI } from "maci-contracts/contracts/MACI.sol";
 import { IPollFactory } from "maci-contracts/contracts/interfaces/IPollFactory.sol";
 import { IMessageProcessorFactory } from "maci-contracts/contracts/interfaces/IMPFactory.sol";
-import { ITallySubsidyFactory } from "maci-contracts/contracts/interfaces/ITallySubsidyFactory.sol";
+import { ITallyFactory } from "maci-contracts/contracts/interfaces/ITallyFactory.sol";
 import { SignUpGatekeeper } from "maci-contracts/contracts/gatekeepers/SignUpGatekeeper.sol";
 import { InitialVoiceCreditProxy } from "maci-contracts/contracts/initialVoiceCreditProxy/InitialVoiceCreditProxy.sol";
-import { TopupCredit } from "maci-contracts/contracts/TopupCredit.sol";
 
 import { IRecipientRegistry } from "./interfaces/IRecipientRegistry.sol";
 import { IFundingRoundTally } from "./interfaces/IFundingRoundTally.sol";
@@ -19,7 +18,7 @@ import { IFundingRoundTally } from "./interfaces/IFundingRoundTally.sol";
 /// @title MinimalQF
 /// @notice This contract is a minimal implementation of a Quadratic Funding
 /// protocol.
-contract MinimalQF is Ownable, MACI {
+contract MinimalQF is Ownable(msg.sender), MACI {
     using SafeERC20 for IERC20;
 
     // the round token
@@ -49,33 +48,29 @@ contract MinimalQF is Ownable, MACI {
     /// @param _fundingRoundFacotory The address of the funding round factory
     /// @param _messageProcessorFactory The address of the message processor factory
     /// @param _tallyFactory The address of the tally factory
-    /// @param _subsidyFactory The address of the subsidy factory
     /// @param _signUpGatekeeper The address of the sign up gatekeeper
     /// @param _initialVoiceCreditProxy The address of the initial voice credit proxy
-    /// @param _topupCredit The address of the topup credit
     /// @param _stateTreeDepth The depth of the state tree
     /// @param _token The address of the token
     /// @param _recipientRegistry The address of the recipient registry
     constructor(
         IPollFactory _fundingRoundFacotory,
         IMessageProcessorFactory _messageProcessorFactory,
-        ITallySubsidyFactory _tallyFactory,
-        ITallySubsidyFactory _subsidyFactory,
+        ITallyFactory _tallyFactory,
         SignUpGatekeeper _signUpGatekeeper,
         InitialVoiceCreditProxy _initialVoiceCreditProxy,
-        TopupCredit _topupCredit,
         uint8 _stateTreeDepth,
         address _token,
-        address _recipientRegistry
+        address _recipientRegistry,
+        uint256[5] memory emptyBallotRoots
     ) MACI(
         _fundingRoundFacotory,
         _messageProcessorFactory,
         _tallyFactory,
-        _subsidyFactory,
         _signUpGatekeeper,
         _initialVoiceCreditProxy,
-        _topupCredit,
-        _stateTreeDepth
+        _stateTreeDepth,
+        emptyBallotRoots
     ) {
         nativeToken = IERC20(_token);
         recipientRegistry = IRecipientRegistry(_recipientRegistry);
@@ -87,23 +82,23 @@ contract MinimalQF is Ownable, MACI {
     /// @param _coordinatorPubKey The public key of the coordinator
     /// @param _verifier The address of the verifier contract
     /// @param _vkRegistry The address of the Verifying Key registry
-    /// @param useSubsidy Whether to use the subsidy feature
     function deployPoll(
         uint256 _duration,
         TreeDepths memory _treeDepths,
         PubKey memory _coordinatorPubKey,
         address _verifier,
         address _vkRegistry,
-        bool useSubsidy
-    ) public override onlyOwner returns (PollContracts memory pollAddr) {
+        Mode _mode
+    ) public override  {
         // deploy the poll
-        pollAddr = super.deployPoll(_duration, _treeDepths, _coordinatorPubKey, _verifier, _vkRegistry, useSubsidy);
+        super.deployPoll(_duration, _treeDepths, _coordinatorPubKey, _verifier, _vkRegistry, _mode);
 
+        PollContracts memory contracts = polls[nextPollId-1];
         // store the contracts
-        tally = IFundingRoundTally(pollAddr.tally);
+        tally = IFundingRoundTally(contracts.tally);
 
         // init the tally contract
-        IFundingRoundTally(pollAddr.tally).initialize(address(nativeToken), address(recipientRegistry), address(this));
+        IFundingRoundTally(contracts.tally).initialize(address(nativeToken), address(recipientRegistry), address(this));
     }
 
     /// @notice Sign up to the MACI system
